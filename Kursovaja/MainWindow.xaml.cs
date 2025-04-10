@@ -9,7 +9,7 @@ using Microsoft.Win32;
 using System.Threading.Tasks;
 using Library;
 
-namespace WildfireClustering
+namespace Kursovaja
 {
     public partial class MainWindow : Window
     {
