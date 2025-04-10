@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Library
 {
-    internal class WildfirePoint
+    internal class WildfireRecord
     {
     }
 }
