@@ -1,12 +1,44 @@
-﻿<Window x:Class="Kursovaja.MainWindow"
+﻿<Window x:Class="WildfireClustering.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:Kursovaja"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
-        
+        Title="Wildfire Clustering" Height="600" Width="1000">
+    <Grid Margin="10">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="2*" />
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Панель управления -->
+        <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+            <Button x:Name="btnLoadData" Content="Загрузить данные" Click="BtnLoadDataClick" Margin="0,0,10,0"/>
+            <TextBlock Text="Epsilon:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtEpsilon" Width="100" Text="0" Margin="0,0,10,0"/>
+            <TextBlock Text="Min Points:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+            <TextBox x:Name="txtMinPoints" Width="100" Text="0" Margin="0,0,10,0"/>
+            <Button x:Name="btnClusterCustom" Content="Кластеризовать" Click="BtnClusterCustomClick" Margin="0,0,10,0"/>
+        </StackPanel>
+
+        <!-- Область визуализации графика -->
+        <Canvas x:Name="canvasCustom" Background="WhiteSmoke" Grid.Row="1" Grid.Column="0" Margin="5"/>
+
+        <!-- Таблица с результатами кластеризации -->
+        <DataGrid x:Name="dataGridResults" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Margin="5" AutoGenerateColumns="False">
+
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Кластер" Binding="{Binding ClusterId}" Width="*"/>
+                <DataGridTextColumn Header="Количество точек" Binding="{Binding PointCount}" Width="*"/>
+                <DataGridTemplateColumn Header="Цвет" Width="*">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Border Background="{Binding ClusterColor}" Width="20" Height="20" BorderBrush="Black" BorderThickness="1"/>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
     </Grid>
 </Window>
