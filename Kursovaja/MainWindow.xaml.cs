@@ -25,10 +25,7 @@ namespace Kursovaja
         public MainWindow()
         {
             InitializeComponent();
-            txtEpsilon.Text = "0.1";
-            txtMinPoints.Text = "20";
             Loaded += MainWindow_Loaded;
-            // Добавляем обработчик события SizeChanged для холста
             canvasCustom.SizeChanged += CanvasCustom_SizeChanged;
         }
 
@@ -39,12 +36,16 @@ namespace Kursovaja
 
         private void CanvasCustom_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            // Если размеры холста изменились и есть загруженные данные, отображаем точки
             if (canvasCustom.ActualWidth > 0 && canvasCustom.ActualHeight > 0 && records.Count > 0)
             {
                 Console.WriteLine($"Размеры холста изменились: Width = {canvasCustom.ActualWidth}, Height = {canvasCustom.ActualHeight}");
                 DisplayRecords();
             }
+        }
+
+        private void DataGridResultsSelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // Add logic here if needed
         }
 
         private async void BtnLoadDataClick(object sender, RoutedEventArgs e)
@@ -81,7 +82,6 @@ namespace Kursovaja
                 CalculateCoordinateRange();
                 Console.WriteLine($"Диапазон координат: minX = {minX}, maxX = {maxX}, minY = {minY}, maxY = {maxY}");
 
-                // Отображаем все загруженные точки на холсте
                 DisplayRecords();
             }
             catch (Exception ex)
@@ -99,23 +99,18 @@ namespace Kursovaja
                 return;
             }
 
-            // Рассчитываем диапазон для Lat и Lon (для возможного использования)
             minLat = maxLat = records[0].Latitude;
             minLon = maxLon = records[0].Longitude;
-
-            // Рассчитываем диапазон для X и Y
             minX = maxX = double.Parse(records[0].X, CultureInfo.InvariantCulture);
             minY = maxY = double.Parse(records[0].Y, CultureInfo.InvariantCulture);
 
             foreach (var record in records)
             {
-                // Диапазон для Lat и Lon
                 minLat = Math.Min(minLat, record.Latitude);
                 maxLat = Math.Max(maxLat, record.Latitude);
                 minLon = Math.Min(minLon, record.Longitude);
                 maxLon = Math.Max(maxLon, record.Longitude);
 
-                // Диапазон для X и Y
                 double x = double.Parse(record.X, CultureInfo.InvariantCulture);
                 double y = double.Parse(record.Y, CultureInfo.InvariantCulture);
                 minX = Math.Min(minX, x);
@@ -124,8 +119,7 @@ namespace Kursovaja
                 maxY = Math.Max(maxY, y);
             }
 
-            // Увеличиваем диапазон, если он слишком мал
-            const double MIN_RANGE = 1.0; // Минимальный диапазон (можно настроить)
+            const double MIN_RANGE = 1.0;
             if (maxLat - minLat < MIN_RANGE)
             {
                 double midLat = (minLat + maxLat) / 2;
@@ -140,8 +134,6 @@ namespace Kursovaja
                 maxLon = midLon + MIN_RANGE / 2;
                 Console.WriteLine($"Долгота расширена искусственно: minLon = {minLon}, maxLon = {maxLon}");
             }
-
-            // Увеличиваем диапазон для X и Y, если он слишком мал
             if (maxX - minX < MIN_RANGE)
             {
                 double midX = (minX + maxX) / 2;
@@ -209,7 +201,6 @@ namespace Kursovaja
                 dataGridResults.ItemsSource = clusterInfos;
             }
 
-            // Удаляем очистку холста здесь, чтобы не стирать предыдущие кластеры
             foreach (var shape in shapes) canvasCustom.Children.Add(shape);
         }
 
@@ -230,13 +221,12 @@ namespace Kursovaja
 
             try
             {
-                // Очищаем холст и информацию о кластерах перед началом кластеризации
                 canvasCustom.Children.Clear();
                 clusterInfos.Clear();
 
                 var dbscan = new DbscanCustom(eps, minPts);
                 dbscan.ClusterFound += (cluster, clusterId) => Dispatcher.Invoke(() => DisplayRecords(cluster, clusterId));
-                await dbscan.ClusterAsync(records);
+                await Task.Run(() => dbscan.Cluster(records));
 
                 MessageBox.Show($"Кластеризация завершена. Найдено {clusterInfos.Count} кластеров.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
@@ -249,14 +239,14 @@ namespace Kursovaja
         private double ConvertXToCanvasX(double x)
         {
             double range = maxX - minX;
-            if (range == 0) return canvasCustom.ActualWidth / 2; // Центр холста, если диапазон нулевой
+            if (range == 0) return canvasCustom.ActualWidth / 2;
             return (x - minX) / range * (canvasCustom.ActualWidth - 10) + 5;
         }
 
         private double ConvertYToCanvasY(double y)
         {
             double range = maxY - minY;
-            if (range == 0) return canvasCustom.ActualHeight / 2; // Центр холста, если диапазон нулевой
+            if (range == 0) return canvasCustom.ActualHeight / 2;
             return (y - minY) / range * (canvasCustom.ActualHeight - 10) + 5;
         }
     }

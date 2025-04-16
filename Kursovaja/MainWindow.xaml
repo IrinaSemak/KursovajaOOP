@@ -4,7 +4,7 @@
         Title="Wildfire Clustering" Height="600" Width="1000">
     <Grid Margin="10">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="3*" />
+            <ColumnDefinition Width="4*" />
             <ColumnDefinition Width="2*" />
         </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
@@ -26,10 +26,9 @@
         <Canvas x:Name="canvasCustom" Background="WhiteSmoke" Grid.Row="1" Grid.Column="0" Margin="5"/>
 
         <!-- Таблица с результатами кластеризации -->
-        <DataGrid x:Name="dataGridResults" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Margin="5" AutoGenerateColumns="False">
-
+        <DataGrid x:Name="dataGridResults" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Margin="5" AutoGenerateColumns="False" SelectionChanged="DataGridResultsSelectionChanged">
             <DataGrid.Columns>
-                <DataGridTextColumn Header="Кластер" Binding="{Binding ClusterId}" Width="*"/>
+                <DataGridTextColumn Header="Кластер" Binding="{Binding ClusterId}" Width="0.5*"/>
                 <DataGridTextColumn Header="Количество точек" Binding="{Binding PointCount}" Width="*"/>
                 <DataGridTemplateColumn Header="Цвет" Width="*">
                     <DataGridTemplateColumn.CellTemplate>

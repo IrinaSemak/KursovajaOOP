@@ -1,7 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
-using Library;
 using NetTopologySuite.Geometries;
 using NetTopologySuite.Index.Strtree;
 
@@ -25,7 +23,7 @@ namespace Library
             labels = Array.Empty<int>();
         }
 
-        public async Task ClusterAsync(IEnumerable<WildfireRecord> inputRecords)
+        public void Cluster(IEnumerable<WildfireRecord> inputRecords)
         {
             records.Clear();
             records.AddRange(inputRecords);
@@ -49,10 +47,9 @@ namespace Library
                 clusterLabel++;
                 labels[i] = clusterLabel;
                 var cluster = new List<WildfireRecord>(neighbors.Count) { records[i] };
-                await ExpandClusterAsync(i, neighbors, clusterLabel, cluster);
+                ExpandCluster(i, neighbors, clusterLabel, cluster);
 
                 ClusterFound?.Invoke(cluster, clusterLabel);
-                await Task.Yield();
             }
         }
 
@@ -91,7 +88,7 @@ namespace Library
             return neighbors;
         }
 
-        private Task ExpandClusterAsync(int _pointIndex, List<int> initialNeighbors, int clusterLabel, List<WildfireRecord> cluster)
+        private void ExpandCluster(int pointIndex, List<int> initialNeighbors, int clusterLabel, List<WildfireRecord> cluster)
         {
             var queue = new Queue<int>(initialNeighbors);
             while (queue.Count > 0)
@@ -111,7 +108,6 @@ namespace Library
                     }
                 }
             }
-            return Task.CompletedTask;
         }
 
         private double CalculateHaversineDistance(WildfireRecord p1, WildfireRecord p2)
