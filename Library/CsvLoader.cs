@@ -60,7 +60,7 @@ namespace Library
                         StreetNumber = parts[3],
                         StreetName = parts[4],
                         StreetType = parts[5],
-                        X = parts[45], 
+                        X = parts[45],
                         Y = parts[46]
                     };
 

@@ -19,7 +19,8 @@
             <TextBox x:Name="txtEpsilon" Width="100" Text="0" Margin="0,0,10,0"/>
             <TextBlock Text="Min Points:" VerticalAlignment="Center" Margin="0,0,5,0"/>
             <TextBox x:Name="txtMinPoints" Width="100" Text="0" Margin="0,0,10,0"/>
-            <Button x:Name="btnClusterCustom" Content="Кластеризовать" Click="BtnClusterCustomClick" Margin="0,0,10,0"/>
+            <Button x:Name="btnClusterCustom" Content="Кластеризовать (DBSCAN)" Click="BtnClusterCustomClick" Margin="0,0,10,0"/>
+            <Button x:Name="btnClusterHDBSCAN" Content="Кластеризовать (HDBSCAN)" Click="BtnClusterHDBSCANClick" Margin="0,0,10,0"/>
         </StackPanel>
 
         <!-- Область визуализации графика -->

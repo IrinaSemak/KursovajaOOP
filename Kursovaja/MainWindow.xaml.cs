@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -15,8 +16,8 @@ namespace Kursovaja
     {
         private readonly List<WildfireRecord> records = new List<WildfireRecord>();
         private readonly List<ClusterInfo> clusterInfos = new List<ClusterInfo>();
-        private double minLat, maxLat, minLon, maxLon; // Оставляем для возможного использования
-        private double minX, maxX, minY, maxY; // Диапазоны для X и Y
+        private double minLat, maxLat, minLon, maxLon;
+        private double minX, maxX, minY, maxY;
         private readonly Brush[] clusterColors = {
             Brushes.Red, Brushes.Blue, Brushes.Green, Brushes.Orange, Brushes.Purple,
             Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
@@ -31,21 +32,21 @@ namespace Kursovaja
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            Console.WriteLine($"Размеры холста при загрузке: Width = {canvasCustom.ActualWidth}, Height = {canvasCustom.ActualHeight}");
+            Console.WriteLine($"Размеры холста при загрузке: Width={canvasCustom.ActualWidth}, Height={canvasCustom.ActualHeight}");
         }
 
         private void CanvasCustom_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (canvasCustom.ActualWidth > 0 && canvasCustom.ActualHeight > 0 && records.Count > 0)
             {
-                Console.WriteLine($"Размеры холста изменились: Width = {canvasCustom.ActualWidth}, Height = {canvasCustom.ActualHeight}");
+                Console.WriteLine($"Размеры холста изменились: Width={canvasCustom.ActualWidth}, Height={canvasCustom.ActualHeight}");
                 DisplayRecords();
             }
         }
 
         private void DataGridResultsSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Add logic here if needed
+            // Пустая реализация, если не требуется
         }
 
         private async void BtnLoadDataClick(object sender, RoutedEventArgs e)
@@ -68,8 +69,17 @@ namespace Kursovaja
                 {
                     foreach (var record in CsvLoader.LoadCsvStream(openFileDialog.FileName))
                     {
-                        if (!record.IsLatitudeMissing && !record.IsLongitudeMissing)
+                        if (!record.IsLatitudeMissing && !record.IsLongitudeMissing &&
+                            !string.IsNullOrEmpty(record.X) && !string.IsNullOrEmpty(record.Y) &&
+                            double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out _) &&
+                            double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                        {
                             records.Add(record);
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Пропущена запись: Lat={record.Latitude}, Lon={record.Longitude}, X={record.X}, Y={record.Y}");
+                        }
                     }
                 });
 
@@ -80,13 +90,13 @@ namespace Kursovaja
                 }
 
                 CalculateCoordinateRange();
-                Console.WriteLine($"Диапазон координат: minX = {minX}, maxX = {maxX}, minY = {minY}, maxY = {maxY}");
+                Console.WriteLine($"Диапазон координат: minX={minX}, maxX={maxX}, minY={minY}, maxY={maxY}");
 
                 DisplayRecords();
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка загрузки: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Ошибка загрузки: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -125,28 +135,28 @@ namespace Kursovaja
                 double midLat = (minLat + maxLat) / 2;
                 minLat = midLat - MIN_RANGE / 2;
                 maxLat = midLat + MIN_RANGE / 2;
-                Console.WriteLine($"Широта расширена искусственно: minLat = {minLat}, maxLat = {maxLat}");
+                Console.WriteLine($"Широта расширена искусственно: minLat={minLat}, maxLat={maxLat}");
             }
             if (maxLon - minLon < MIN_RANGE)
             {
                 double midLon = (minLon + maxLon) / 2;
                 minLon = midLon - MIN_RANGE / 2;
                 maxLon = midLon + MIN_RANGE / 2;
-                Console.WriteLine($"Долгота расширена искусственно: minLon = {minLon}, maxLon = {maxLon}");
+                Console.WriteLine($"Долгота расширена искусственно: minLon={minLon}, maxLon={maxLon}");
             }
             if (maxX - minX < MIN_RANGE)
             {
                 double midX = (minX + maxX) / 2;
                 minX = midX - MIN_RANGE / 2;
                 maxX = midX + MIN_RANGE / 2;
-                Console.WriteLine($"X расширен искусственно: minX = {minX}, maxX = {maxX}");
+                Console.WriteLine($"X расширен искусственно: minX={minX}, maxX={maxX}");
             }
             if (maxY - minY < MIN_RANGE)
             {
                 double midY = (minY + maxY) / 2;
                 minY = midY - MIN_RANGE / 2;
                 maxY = midY + MIN_RANGE / 2;
-                Console.WriteLine($"Y расширен искусственно: minY = {minY}, maxY = {maxY}");
+                Console.WriteLine($"Y расширен искусственно: minY={minY}, maxY={maxY}");
             }
         }
 
@@ -155,18 +165,19 @@ namespace Kursovaja
             if (canvasCustom.ActualWidth == 0 || canvasCustom.ActualHeight == 0)
             {
                 Console.WriteLine("Холст еще не готов для отображения. Размеры: " +
-                                  $"Width = {canvasCustom.ActualWidth}, Height = {canvasCustom.ActualHeight}");
+                                  $"Width={canvasCustom.ActualWidth}, Height={canvasCustom.ActualHeight}");
                 return;
             }
 
             var shapes = new List<UIElement>(cluster?.Count ?? records.Count);
+            Console.WriteLine($"Отображение: clusterId={clusterId}, точек={(cluster?.Count ?? records.Count)}");
             if (cluster == null)
             {
                 foreach (var record in records)
                 {
                     double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
                     double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                    Console.WriteLine($"Точка: X = {record.X}, Y = {record.Y}, Canvas X = {x}, Canvas Y = {y}");
+                    Console.WriteLine($"Точка: X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
                     var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Red };
                     Canvas.SetLeft(shape, x);
                     Canvas.SetTop(shape, y);
@@ -186,11 +197,12 @@ namespace Kursovaja
                 if (!clusterInfos.Contains(clusterInfo)) clusterInfos.Add(clusterInfo);
                 else clusterInfo.PointCount = cluster.Count;
 
+                Console.WriteLine($"Кластер {clusterId}: {cluster.Count} точек");
                 foreach (var record in cluster)
                 {
                     double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
                     double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                    Console.WriteLine($"Кластер {clusterId}: X = {record.X}, Y = {record.Y}, Canvas X = {x}, Canvas Y = {y}");
+                    Console.WriteLine($"Кластер {clusterId}: X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
                     var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
                     Canvas.SetLeft(shape, x);
                     Canvas.SetTop(shape, y);
@@ -201,7 +213,32 @@ namespace Kursovaja
                 dataGridResults.ItemsSource = clusterInfos;
             }
 
-            foreach (var shape in shapes) canvasCustom.Children.Add(shape);
+            foreach (var shape in shapes)
+            {
+                Console.WriteLine($"Добавление фигуры на холст: Left={Canvas.GetLeft(shape)}, Top={Canvas.GetTop(shape)}");
+                canvasCustom.Children.Add(shape);
+            }
+        }
+
+        private void DisplayNoise(List<WildfireRecord> noiseRecords)
+        {
+            var shapes = new List<UIElement>(noiseRecords.Count);
+            Console.WriteLine($"Отображение шума: {noiseRecords.Count} точек");
+            foreach (var record in noiseRecords)
+            {
+                double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
+                double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Gray };
+                Canvas.SetLeft(shape, x);
+                Canvas.SetTop(shape, y);
+                shape.ToolTip = $"Шум\nLat: {record.Latitude}\nLon: {record.Longitude}";
+                shapes.Add(shape);
+            }
+
+            foreach (var shape in shapes)
+            {
+                canvasCustom.Children.Add(shape);
+            }
         }
 
         private async void BtnClusterCustomClick(object sender, RoutedEventArgs e)
@@ -224,15 +261,60 @@ namespace Kursovaja
                 canvasCustom.Children.Clear();
                 clusterInfos.Clear();
 
-                var dbscan = new DbscanCustom(eps, minPts);
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var dbscan = new DbscanCustom(eps, minPts); // Удален третий аргумент
                 dbscan.ClusterFound += (cluster, clusterId) => Dispatcher.Invoke(() => DisplayRecords(cluster, clusterId));
                 await Task.Run(() => dbscan.Cluster(records));
+                stopwatch.Stop();
+                Console.WriteLine($"DBSCAN выполнено за: {stopwatch.ElapsedMilliseconds} мс");
 
-                MessageBox.Show($"Кластеризация завершена. Найдено {clusterInfos.Count} кластеров.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                // Отображение шума
+                var noiseRecords = records.Where((r, i) => dbscan.Labels[i] == -1).ToList();
+                await Dispatcher.InvokeAsync(() => DisplayNoise(noiseRecords));
+
+                MessageBox.Show($"Кластеризация завершена. Найдено {clusterInfos.Count} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка кластеризации: {ex.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Ошибка кластеризации: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void BtnClusterHDBSCANClick(object sender, RoutedEventArgs e)
+        {
+            if (records.Count == 0)
+            {
+                MessageBox.Show("Нет данных для кластеризации.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (!int.TryParse(txtMinPoints.Text, out int minPts) || minPts < 1)
+            {
+                MessageBox.Show("Некорректное значение Min Points.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            try
+            {
+                canvasCustom.Children.Clear();
+                clusterInfos.Clear();
+
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                var hdbscan = new HdbscanCustom(minPts, 5); // minClusterSize = 5
+                hdbscan.ClusterFound += (cluster, clusterId) => Dispatcher.Invoke(() => DisplayRecords(cluster, clusterId));
+                await hdbscan.Cluster(records);
+                stopwatch.Stop();
+                Console.WriteLine($"HDBSCAN выполнено за: {stopwatch.ElapsedMilliseconds} мс");
+
+                // Отображение шума
+                var noiseRecords = records.Where((r, i) => hdbscan.Labels[i] == 0).ToList();
+                await Dispatcher.InvokeAsync(() => DisplayNoise(noiseRecords));
+
+                MessageBox.Show($"Кластеризация завершена. Найдено {clusterInfos.Count} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show($"Ошибка кластеризации: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 

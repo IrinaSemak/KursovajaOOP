@@ -14,6 +14,7 @@ namespace Library
         private STRtree<int> spatialIndex;
 
         public event Action<List<WildfireRecord>, int> ClusterFound;
+        public int[] Labels => labels;
 
         public DbscanCustom(double epsilon, int minPoints)
         {
@@ -25,31 +26,42 @@ namespace Library
 
         public void Cluster(IEnumerable<WildfireRecord> inputRecords)
         {
-            records.Clear();
-            records.AddRange(inputRecords);
-            if (records.Count == 0) return;
-
-            labels = new int[records.Count];
-            BuildSpatialIndex();
-
-            int clusterLabel = 0;
-            for (int i = 0; i < records.Count; i++)
+            try
             {
-                if (labels[i] != 0) continue;
+                records.Clear();
+                records.AddRange(inputRecords);
+                if (records.Count == 0) return;
 
-                var neighbors = GetNeighbors(i);
-                if (neighbors.Count < minPoints)
+                labels = new int[records.Count];
+                BuildSpatialIndex();
+
+                int clusterLabel = 0;
+                for (int i = 0; i < records.Count; i++)
                 {
-                    labels[i] = -1;
-                    continue;
+                    if (labels[i] != 0) continue;
+
+                    var neighbors = GetNeighbors(i);
+                    if (neighbors.Count < minPoints)
+                    {
+                        labels[i] = -1;
+                        continue;
+                    }
+
+                    clusterLabel++;
+                    labels[i] = clusterLabel;
+                    var cluster = new List<WildfireRecord>(neighbors.Count) { records[i] };
+                    ExpandCluster(i, neighbors, clusterLabel, cluster);
+
+                    ClusterFound?.Invoke(cluster, clusterLabel);
                 }
-
-                clusterLabel++;
-                labels[i] = clusterLabel;
-                var cluster = new List<WildfireRecord>(neighbors.Count) { records[i] };
-                ExpandCluster(i, neighbors, clusterLabel, cluster);
-
-                ClusterFound?.Invoke(cluster, clusterLabel);
+            }
+            catch (TypeInitializationException ex)
+            {
+                throw new Exception($"Ошибка инициализации NetTopologySuite: {ex.InnerException?.Message}", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new Exception($"Ошибка кластеризации: {ex.Message}", ex);
             }
         }
 
@@ -58,7 +70,13 @@ namespace Library
             spatialIndex = new STRtree<int>(10);
             for (int i = 0; i < records.Count; i++)
             {
-                if (records[i].IsLatitudeMissing || records[i].IsLongitudeMissing) continue;
+                if (records[i].IsLatitudeMissing || records[i].IsLongitudeMissing ||
+                    double.IsNaN(records[i].Latitude) || double.IsNaN(records[i].Longitude) ||
+                    double.IsInfinity(records[i].Latitude) || double.IsInfinity(records[i].Longitude))
+                {
+                    Console.WriteLine($"Пропущена запись с индексом {i}: Lat={records[i].Latitude}, Lon={records[i].Longitude}");
+                    continue;
+                }
                 var point = new Point(records[i].Longitude, records[i].Latitude);
                 spatialIndex.Insert(point.EnvelopeInternal, i);
             }
