@@ -6,6 +6,6 @@ namespace Kursovaja
     {
         public int ClusterId { get; set; }
         public int PointCount { get; set; }
-        public Brush ClusterColor { get; set; }
+        public System.Windows.Media.Brush ClusterColor { get; set; }
     }
 }

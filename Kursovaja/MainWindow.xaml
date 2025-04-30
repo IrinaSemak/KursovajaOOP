@@ -3,42 +3,99 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Wildfire Clustering" Height="600" Width="1000">
     <Grid Margin="10">
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="4*" />
-            <ColumnDefinition Width="2*" />
-        </Grid.ColumnDefinitions>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <!-- Панель управления -->
-        <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+        <!-- Общая кнопка загрузки данных -->
+        <StackPanel Orientation="Horizontal" Grid.Row="0" Margin="0,0,0,10">
             <Button x:Name="btnLoadData" Content="Загрузить данные" Click="BtnLoadDataClick" Margin="0,0,10,0"/>
-            <TextBlock Text="Epsilon:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <TextBox x:Name="txtEpsilon" Width="100" Text="0" Margin="0,0,10,0"/>
-            <TextBlock Text="Min Points:" VerticalAlignment="Center" Margin="0,0,5,0"/>
-            <TextBox x:Name="txtMinPoints" Width="100" Text="0" Margin="0,0,10,0"/>
-            <Button x:Name="btnClusterCustom" Content="Кластеризовать (DBSCAN)" Click="BtnClusterCustomClick" Margin="0,0,10,0"/>
-            <Button x:Name="btnClusterHDBSCAN" Content="Кластеризовать (HDBSCAN)" Click="BtnClusterHDBSCANClick" Margin="0,0,10,0"/>
         </StackPanel>
 
-        <!-- Область визуализации графика -->
-        <Canvas x:Name="canvasCustom" Background="WhiteSmoke" Grid.Row="1" Grid.Column="0" Margin="5"/>
+        <!-- Вкладки для DBSCAN и HDBSCAN -->
+        <TabControl Grid.Row="1">
+            <!-- Вкладка DBSCAN -->
+            <TabItem Header="DBSCAN">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4*" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
 
-        <!-- Таблица с результатами кластеризации -->
-        <DataGrid x:Name="dataGridResults" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Margin="5" AutoGenerateColumns="False" SelectionChanged="DataGridResultsSelectionChanged">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Кластер" Binding="{Binding ClusterId}" Width="0.5*"/>
-                <DataGridTextColumn Header="Количество точек" Binding="{Binding PointCount}" Width="*"/>
-                <DataGridTemplateColumn Header="Цвет" Width="*">
-                    <DataGridTemplateColumn.CellTemplate>
-                        <DataTemplate>
-                            <Border Background="{Binding ClusterColor}" Width="20" Height="20" BorderBrush="Black" BorderThickness="1"/>
-                        </DataTemplate>
-                    </DataGridTemplateColumn.CellTemplate>
-                </DataGridTemplateColumn>
-            </DataGrid.Columns>
-        </DataGrid>
+                    <!-- Панель управления DBSCAN -->
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                        <TextBlock Text="Epsilon:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="txtEpsilonDBSCAN" Width="100" Text="10" Margin="0,0,10,0"/>
+                        <TextBlock Text="Min Points:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="txtMinPointsDBSCAN" Width="100" Text="100" Margin="0,0,10,0"/>
+                        <Button x:Name="btnClusterCustom" Content="Кластеризовать (DBSCAN)" Click="BtnClusterCustomClick" Margin="0,0,10,0"/>
+                    </StackPanel>
+
+                    <!-- Область визуализации графика DBSCAN -->
+                    <Canvas x:Name="canvasCustomDBSCAN" Background="WhiteSmoke" Grid.Row="1" Grid.Column="0" Margin="5"/>
+
+                    <!-- Таблица с результатами DBSCAN -->
+                    <DataGrid x:Name="dataGridResultsDBSCAN" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Margin="5" AutoGenerateColumns="False" SelectionChanged="DataGridResultsSelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Кластер" Binding="{Binding ClusterId}" Width="0.5*"/>
+                            <DataGridTextColumn Header="Количество точек" Binding="{Binding PointCount}" Width="*"/>
+                            <DataGridTemplateColumn Header="Цвет" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{Binding ClusterColor}" Width="20" Height="20" BorderBrush="Black" BorderThickness="1"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+
+            <!-- Вкладка HDBSCAN -->
+            <TabItem Header="HDBSCAN">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="4*" />
+                        <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <!-- Панель управления HDBSCAN -->
+                    <StackPanel Orientation="Horizontal" Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                        <TextBlock Text="Epsilon:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="txtEpsilonHDBSCAN" Width="100" Text="10" Margin="0,0,10,0"/>
+                        <TextBlock Text="Min Points:" VerticalAlignment="Center" Margin="0,0,5,0"/>
+                        <TextBox x:Name="txtMinPointsHDBSCAN" Width="100" Text="100" Margin="0,0,10,0"/>
+                        <Button x:Name="btnClusterHDBSCAN" Content="Кластеризовать (HDBSCAN)" Click="BtnClusterHDBSCANClick" Margin="0,0,10,0"/>
+                    </StackPanel>
+
+                    <!-- Область визуализации графика HDBSCAN -->
+                    <Canvas x:Name="canvasCustomHDBSCAN" Background="WhiteSmoke" Grid.Row="1" Grid.Column="0" Margin="5"/>
+
+                    <!-- Таблица с результатами HDBSCAN -->
+                    <DataGrid x:Name="dataGridResultsHDBSCAN" Grid.Row="1" Grid.Column="1" IsReadOnly="True" Margin="5" AutoGenerateColumns="False" SelectionChanged="DataGridResultsSelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Кластер" Binding="{Binding ClusterId}" Width="0.5*"/>
+                            <DataGridTextColumn Header="Количество точек" Binding="{Binding PointCount}" Width="*"/>
+                            <DataGridTemplateColumn Header="Цвет" Width="*">
+                                <DataGridTemplateColumn.CellTemplate>
+                                    <DataTemplate>
+                                        <Border Background="{Binding ClusterColor}" Width="20" Height="20" BorderBrush="Black" BorderThickness="1"/>
+                                    </DataTemplate>
+                                </DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </TabItem>
+        </TabControl>
     </Grid>
 </Window>

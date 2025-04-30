@@ -1,144 +1,161 @@
 ﻿using System;
 using System.Collections.Generic;
-using NetTopologySuite.Geometries;
-using NetTopologySuite.Index.Strtree;
 
 namespace Library
 {
+    // Класс DbscanCustom выполняет кластеризацию точек (группирует их)
     public class DbscanCustom
     {
-        private readonly double epsilon;
-        private readonly int minPoints;
-        private readonly List<WildfireRecord> records;
-        private int[] labels;
-        private STRtree<int> spatialIndex;
+        private readonly double epsilon; // Максимальное расстояние между точками в одном кластере
+        private readonly int minPoints; // Минимальное количество точек для создания кластера
+        private List<WildfireRecord> records; // Список всех точек
+        private int[] labels; // Метки для каждой точки (какой кластер или шум)
 
+        // Событие, которое вызывается, когда найден новый кластер
         public event Action<List<WildfireRecord>, int> ClusterFound;
+
+        // Свойство, чтобы получить метки точек
         public int[] Labels => labels;
 
+        // Конструктор: задаём параметры epsilon и minPoints
         public DbscanCustom(double epsilon, int minPoints)
         {
             this.epsilon = epsilon;
             this.minPoints = minPoints;
             records = new List<WildfireRecord>();
-            labels = Array.Empty<int>();
+            labels = new int[0];
         }
 
+        // Главный метод для кластеризации
         public void Cluster(IEnumerable<WildfireRecord> inputRecords)
         {
-            try
+            // Очищаем старые данные
+            records.Clear();
+            records.AddRange(inputRecords);
+
+            // Если нет точек, выходим
+            if (records.Count == 0)
             {
-                records.Clear();
-                records.AddRange(inputRecords);
-                if (records.Count == 0) return;
-
-                labels = new int[records.Count];
-                BuildSpatialIndex();
-
-                int clusterLabel = 0;
-                for (int i = 0; i < records.Count; i++)
-                {
-                    if (labels[i] != 0) continue;
-
-                    var neighbors = GetNeighbors(i);
-                    if (neighbors.Count < minPoints)
-                    {
-                        labels[i] = -1;
-                        continue;
-                    }
-
-                    clusterLabel++;
-                    labels[i] = clusterLabel;
-                    var cluster = new List<WildfireRecord>(neighbors.Count) { records[i] };
-                    ExpandCluster(i, neighbors, clusterLabel, cluster);
-
-                    ClusterFound?.Invoke(cluster, clusterLabel);
-                }
+                labels = new int[0];
+                return;
             }
-            catch (TypeInitializationException ex)
-            {
-                throw new Exception($"Ошибка инициализации NetTopologySuite: {ex.InnerException?.Message}", ex);
-            }
-            catch (Exception ex)
-            {
-                throw new Exception($"Ошибка кластеризации: {ex.Message}", ex);
-            }
-        }
 
-        private void BuildSpatialIndex()
-        {
-            spatialIndex = new STRtree<int>(10);
+            // Создаём массив меток для каждой точки
+            labels = new int[records.Count];
+
+            int clusterLabel = 0; // Номер текущего кластера
+
+            // Проходим по всем точкам
             for (int i = 0; i < records.Count; i++)
             {
-                if (records[i].IsLatitudeMissing || records[i].IsLongitudeMissing ||
-                    double.IsNaN(records[i].Latitude) || double.IsNaN(records[i].Longitude) ||
-                    double.IsInfinity(records[i].Latitude) || double.IsInfinity(records[i].Longitude))
+                // Если точка уже обработана, пропускаем её
+                if (labels[i] != 0) continue;
+
+                // Находим соседей точки
+                var neighbors = GetNeighbors(i);
+
+                // Если соседей слишком мало, помечаем точку как шум
+                if (neighbors.Count < minPoints)
                 {
-                    Console.WriteLine($"Пропущена запись с индексом {i}: Lat={records[i].Latitude}, Lon={records[i].Longitude}");
+                    labels[i] = -1; // -1 означает шум
                     continue;
                 }
-                var point = new Point(records[i].Longitude, records[i].Latitude);
-                spatialIndex.Insert(point.EnvelopeInternal, i);
+
+                // Создаём новый кластер
+                clusterLabel++;
+                labels[i] = clusterLabel; // Помечаем точку как часть кластера
+                var cluster = new List<WildfireRecord> { records[i] }; // Начинаем кластер с этой точки
+
+                // Расширяем кластер, добавляя соседей
+                ExpandCluster(neighbors, clusterLabel, cluster);
+
+                // Сообщаем, что найден новый кластер
+                ClusterFound?.Invoke(cluster, clusterLabel);
             }
-            spatialIndex.Build();
         }
 
+        // Метод для поиска соседей точки
         private List<int> GetNeighbors(int pointIndex)
         {
-            var record = records[pointIndex];
-            var point = new Point(record.Longitude, record.Latitude);
-            double degreeRadius = epsilon / 111.32;
-            var envelope = point.EnvelopeInternal;
-            envelope.ExpandBy(degreeRadius);
+            var neighbors = new List<int>();
+            var point = records[pointIndex];
 
-            var candidates = spatialIndex.Query(envelope);
-            var neighbors = new List<int>(Math.Min(candidates.Count, 1000));
-
-            foreach (var candidateIndex in candidates)
+            // Проходим по всем точкам
+            for (int i = 0; i < records.Count; i++)
             {
-                if (candidateIndex == pointIndex) continue;
-                if (CalculateHaversineDistance(record, records[candidateIndex]) <= epsilon)
+                // Пропускаем саму точку
+                if (i == pointIndex) continue;
+
+                // Вычисляем расстояние между точками
+                double distance = CalculateDistance(
+                    point.Latitude, point.Longitude,
+                    records[i].Latitude, records[i].Longitude
+                );
+
+                // Если расстояние меньше epsilon, добавляем точку в соседи
+                if (distance <= epsilon)
                 {
-                    neighbors.Add(candidateIndex);
-                    if (neighbors.Count >= 1000) break;
+                    neighbors.Add(i);
                 }
             }
+
             return neighbors;
         }
 
-        private void ExpandCluster(int pointIndex, List<int> initialNeighbors, int clusterLabel, List<WildfireRecord> cluster)
+        // Метод для вычисления расстояния между двумя точками (в километрах)
+        private double CalculateDistance(double lat1, double lon1, double lat2, double lon2)
         {
+            // Радиус Земли в километрах
+            const double R = 6371;
+
+            // Переводим градусы в радианы
+            double dLat = (lat2 - lat1) * Math.PI / 180;
+            double dLon = (lon2 - lon1) * Math.PI / 180;
+
+            // Формула гаверсинуса для вычисления расстояния
+            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
+                       Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) *
+                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
+
+            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
+            return R * c;
+        }
+
+        // Метод для расширения кластера
+        private void ExpandCluster(List<int> initialNeighbors, int clusterLabel, List<WildfireRecord> cluster)
+        {
+            // Создаём очередь для обработки соседей
             var queue = new Queue<int>(initialNeighbors);
+
+            // Пока есть соседи для обработки
             while (queue.Count > 0)
             {
+                // Берём следующую точку из очереди
                 int neighborIndex = queue.Dequeue();
-                if (labels[neighborIndex] == -1 || labels[neighborIndex] == 0)
-                {
-                    labels[neighborIndex] = clusterLabel;
-                    cluster.Add(records[neighborIndex]);
 
-                    var furtherNeighbors = GetNeighbors(neighborIndex);
-                    if (furtherNeighbors.Count >= minPoints)
+                // Если точка уже обработана (не шум и не новая), пропускаем
+                if (labels[neighborIndex] != 0 && labels[neighborIndex] != -1) continue;
+
+                // Помечаем точку как часть кластера
+                labels[neighborIndex] = clusterLabel;
+                cluster.Add(records[neighborIndex]);
+
+                // Находим соседей этой точки
+                var furtherNeighbors = GetNeighbors(neighborIndex);
+
+                // Если у точки достаточно соседей, добавляем их в очередь
+                if (furtherNeighbors.Count >= minPoints)
+                {
+                    foreach (var furtherNeighbor in furtherNeighbors)
                     {
-                        foreach (var furtherNeighbor in furtherNeighbors)
-                            if (labels[furtherNeighbor] == 0 || labels[furtherNeighbor] == -1)
-                                queue.Enqueue(furtherNeighbor);
+                        // Добавляем только необработанные точки или шум
+                        if (labels[furtherNeighbor] == 0 || labels[furtherNeighbor] == -1)
+                        {
+                            queue.Enqueue(furtherNeighbor);
+                        }
                     }
                 }
             }
         }
-
-        private double CalculateHaversineDistance(WildfireRecord p1, WildfireRecord p2)
-        {
-            const double R = 6371;
-            double lat1 = ToRadians(p1.Latitude), lon1 = ToRadians(p1.Longitude);
-            double lat2 = ToRadians(p2.Latitude), lon2 = ToRadians(p2.Longitude);
-            double dLat = lat2 - lat1, dLon = lon2 - lon1;
-            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                       Math.Cos(lat1) * Math.Cos(lat2) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-            return R * (2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a)));
-        }
-
-        private static double ToRadians(double degrees) => degrees * Math.PI / 180;
     }
 }

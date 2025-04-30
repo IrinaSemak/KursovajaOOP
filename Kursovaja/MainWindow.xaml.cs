@@ -9,38 +9,51 @@ using System.Globalization;
 using Microsoft.Win32;
 using System.Threading.Tasks;
 using Library;
+using System.IO;
 
 namespace Kursovaja
 {
     public partial class MainWindow : Window
     {
         private readonly List<WildfireRecord> records = new List<WildfireRecord>();
-        private readonly List<ClusterInfo> clusterInfos = new List<ClusterInfo>();
+        private readonly List<ClusterInfo> clusterInfosDBSCAN = new List<ClusterInfo>(); // Для DBSCAN
+        private readonly List<ClusterInfo> clusterInfosHDBSCAN = new List<ClusterInfo>(); // Для HDBSCAN
         private double minLat, maxLat, minLon, maxLon;
         private double minX, maxX, minY, maxY;
         private readonly Brush[] clusterColors = {
-            Brushes.Red, Brushes.Blue, Brushes.Green, Brushes.Orange, Brushes.Purple,
-            Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
-        };
+Brushes.Red, Brushes.Blue, Brushes.Green, Brushes.Orange, Brushes.Purple,
+Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
+};
 
         public MainWindow()
         {
             InitializeComponent();
             Loaded += MainWindow_Loaded;
-            canvasCustom.SizeChanged += CanvasCustom_SizeChanged;
+            canvasCustomDBSCAN.SizeChanged += CanvasCustomDBSCAN_SizeChanged;
+            canvasCustomHDBSCAN.SizeChanged += CanvasCustomHDBSCAN_SizeChanged;
         }
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            Console.WriteLine($"Размеры холста при загрузке: Width={canvasCustom.ActualWidth}, Height={canvasCustom.ActualHeight}");
+            Console.WriteLine($"DBSCAN: Размеры холста при загрузке: Width={canvasCustomDBSCAN.ActualWidth}, Height={canvasCustomDBSCAN.ActualHeight}");
+            Console.WriteLine($"HDBSCAN: Размеры холста при загрузке: Width={canvasCustomHDBSCAN.ActualWidth}, Height={canvasCustomHDBSCAN.ActualHeight}");
         }
 
-        private void CanvasCustom_SizeChanged(object sender, SizeChangedEventArgs e)
+        private void CanvasCustomDBSCAN_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            if (canvasCustom.ActualWidth > 0 && canvasCustom.ActualHeight > 0 && records.Count > 0)
+            if (canvasCustomDBSCAN.ActualWidth > 0 && canvasCustomDBSCAN.ActualHeight > 0 && records.Count > 0)
             {
-                Console.WriteLine($"Размеры холста изменились: Width={canvasCustom.ActualWidth}, Height={canvasCustom.ActualHeight}");
-                DisplayRecords();
+                Console.WriteLine($"DBSCAN: Размеры холста изменились: Width={canvasCustomDBSCAN.ActualWidth}, Height={canvasCustomDBSCAN.ActualHeight}");
+                DisplayRecordsDBSCAN();
+            }
+        }
+
+        private void CanvasCustomHDBSCAN_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (canvasCustomHDBSCAN.ActualWidth > 0 && canvasCustomHDBSCAN.ActualHeight > 0 && records.Count > 0)
+            {
+                Console.WriteLine($"HDBSCAN: Размеры холста изменились: Width={canvasCustomHDBSCAN.ActualWidth}, Height={canvasCustomHDBSCAN.ActualHeight}");
+                DisplayRecordsHDBSCAN();
             }
         }
 
@@ -53,7 +66,7 @@ namespace Kursovaja
         {
             var openFileDialog = new OpenFileDialog
             {
-                Filter = "CSV files (*.csv)|*.csv|All files (*.*)|*.*",
+
                 Title = "Выберите CSV-файл с данными"
             };
 
@@ -62,17 +75,19 @@ namespace Kursovaja
             try
             {
                 records.Clear();
-                canvasCustom.Children.Clear();
-                dataGridResults.ItemsSource = null;
+                canvasCustomDBSCAN.Children.Clear();
+                canvasCustomHDBSCAN.Children.Clear();
+                dataGridResultsDBSCAN.ItemsSource = null;
+                dataGridResultsHDBSCAN.ItemsSource = null;
 
                 await Task.Run(() =>
                 {
                     foreach (var record in CsvLoader.LoadCsvStream(openFileDialog.FileName))
                     {
                         if (!record.IsLatitudeMissing && !record.IsLongitudeMissing &&
-                            !string.IsNullOrEmpty(record.X) && !string.IsNullOrEmpty(record.Y) &&
-                            double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out _) &&
-                            double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                        !string.IsNullOrEmpty(record.X) && !string.IsNullOrEmpty(record.Y) &&
+                        double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out _) &&
+                        double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
                         {
                             records.Add(record);
                         }
@@ -91,8 +106,10 @@ namespace Kursovaja
 
                 CalculateCoordinateRange();
                 Console.WriteLine($"Диапазон координат: minX={minX}, maxX={maxX}, minY={minY}, maxY={maxY}");
+                Console.WriteLine($"Прочитано {records.Count} точек");
 
-                DisplayRecords();
+                DisplayRecordsDBSCAN();
+                DisplayRecordsHDBSCAN();
             }
             catch (Exception ex)
             {
@@ -129,7 +146,7 @@ namespace Kursovaja
                 maxY = Math.Max(maxY, y);
             }
 
-            const double MIN_RANGE = 1.0;
+            const double MIN_RANGE = 0.0001;
             if (maxLat - minLat < MIN_RANGE)
             {
                 double midLat = (minLat + maxLat) / 2;
@@ -160,24 +177,28 @@ namespace Kursovaja
             }
         }
 
-        private void DisplayRecords(List<WildfireRecord> cluster = null, int clusterId = 0)
+        private void DisplayRecordsDBSCAN(List<WildfireRecord> cluster = null, int clusterId = 0)
         {
-            if (canvasCustom.ActualWidth == 0 || canvasCustom.ActualHeight == 0)
+            if (canvasCustomDBSCAN.ActualWidth == 0 || canvasCustomDBSCAN.ActualHeight == 0)
             {
-                Console.WriteLine("Холст еще не готов для отображения. Размеры: " +
-                                  $"Width={canvasCustom.ActualWidth}, Height={canvasCustom.ActualHeight}");
+                Console.WriteLine("DBSCAN: Холст еще не готов для отображения. Размеры: " +
+                $"Width={canvasCustomDBSCAN.ActualWidth}, Height={canvasCustomDBSCAN.ActualHeight}");
                 return;
             }
 
             var shapes = new List<UIElement>(cluster?.Count ?? records.Count);
-            Console.WriteLine($"Отображение: clusterId={clusterId}, точек={(cluster?.Count ?? records.Count)}");
+            Console.WriteLine($"DBSCAN: Отображение: clusterId={clusterId}, точек={(cluster?.Count ?? records.Count)}");
             if (cluster == null)
             {
                 foreach (var record in records)
                 {
                     double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
                     double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                    Console.WriteLine($"Точка: X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                    {
+                        Console.WriteLine($"DBSCAN: Пропущена точка (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                        continue;
+                    }
                     var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Red };
                     Canvas.SetLeft(shape, x);
                     Canvas.SetTop(shape, y);
@@ -188,46 +209,129 @@ namespace Kursovaja
             else
             {
                 Brush color = clusterColors[clusterId % clusterColors.Length];
-                var clusterInfo = clusterInfos.Find(ci => ci.ClusterId == clusterId) ?? new ClusterInfo
+                var clusterInfo = clusterInfosDBSCAN.Find(ci => ci.ClusterId == clusterId) ?? new ClusterInfo
                 {
                     ClusterId = clusterId,
                     PointCount = cluster.Count,
                     ClusterColor = color
                 };
-                if (!clusterInfos.Contains(clusterInfo)) clusterInfos.Add(clusterInfo);
+                if (!clusterInfosDBSCAN.Contains(clusterInfo)) clusterInfosDBSCAN.Add(clusterInfo);
                 else clusterInfo.PointCount = cluster.Count;
 
-                Console.WriteLine($"Кластер {clusterId}: {cluster.Count} точек");
+                Console.WriteLine($"DBSCAN: Кластер {clusterId}: {cluster.Count} точек");
                 foreach (var record in cluster)
                 {
                     double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
                     double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                    Console.WriteLine($"Кластер {clusterId}: X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                    {
+                        Console.WriteLine($"DBSCAN: Пропущена точка в кластере (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                        continue;
+                    }
                     var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
                     Canvas.SetLeft(shape, x);
                     Canvas.SetTop(shape, y);
                     shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
                     shapes.Add(shape);
                 }
-                dataGridResults.ItemsSource = null;
-                dataGridResults.ItemsSource = clusterInfos;
             }
 
             foreach (var shape in shapes)
             {
-                Console.WriteLine($"Добавление фигуры на холст: Left={Canvas.GetLeft(shape)}, Top={Canvas.GetTop(shape)}");
-                canvasCustom.Children.Add(shape);
+                double left = Canvas.GetLeft(shape);
+                double top = Canvas.GetTop(shape);
+                if (left < 0 || left > canvasCustomDBSCAN.ActualWidth || top < 0 || top > canvasCustomDBSCAN.ActualHeight)
+                {
+                    continue;
+                }
+                canvasCustomDBSCAN.Children.Add(shape);
             }
         }
 
-        private void DisplayNoise(List<WildfireRecord> noiseRecords)
+        private void DisplayRecordsHDBSCAN(List<WildfireRecord> cluster = null, int clusterId = 0)
+        {
+            if (canvasCustomHDBSCAN.ActualWidth == 0 || canvasCustomHDBSCAN.ActualHeight == 0)
+            {
+                Console.WriteLine("HDBSCAN: Холст еще не готов для отображения. Размеры: " +
+                $"Width={canvasCustomHDBSCAN.ActualWidth}, Height={canvasCustomHDBSCAN.ActualHeight}");
+                return;
+            }
+
+            var shapes = new List<UIElement>(cluster?.Count ?? records.Count);
+            Console.WriteLine($"HDBSCAN: Отображение: clusterId={clusterId}, точек={(cluster?.Count ?? records.Count)}");
+            if (cluster == null)
+            {
+                foreach (var record in records)
+                {
+                    double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
+                    double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                    {
+                        Console.WriteLine($"HDBSCAN: Пропущена точка (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                        continue;
+                    }
+                    var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Red };
+                    Canvas.SetLeft(shape, x);
+                    Canvas.SetTop(shape, y);
+                    shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
+                    shapes.Add(shape);
+                }
+            }
+            else
+            {
+                Brush color = clusterColors[clusterId % clusterColors.Length];
+                var clusterInfo = clusterInfosHDBSCAN.Find(ci => ci.ClusterId == clusterId) ?? new ClusterInfo
+                {
+                    ClusterId = clusterId,
+                    PointCount = cluster.Count,
+                    ClusterColor = color
+                };
+                if (!clusterInfosHDBSCAN.Contains(clusterInfo)) clusterInfosHDBSCAN.Add(clusterInfo);
+                else clusterInfo.PointCount = cluster.Count;
+
+                Console.WriteLine($"HDBSCAN: Кластер {clusterId}: {cluster.Count} точек");
+                foreach (var record in cluster)
+                {
+                    double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
+                    double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                    {
+                        Console.WriteLine($"HDBSCAN: Пропущена точка в кластере (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                        continue;
+                    }
+                    var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
+                    Canvas.SetLeft(shape, x);
+                    Canvas.SetTop(shape, y);
+                    shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
+                    shapes.Add(shape);
+                }
+            }
+
+            foreach (var shape in shapes)
+            {
+                double left = Canvas.GetLeft(shape);
+                double top = Canvas.GetTop(shape);
+                if (left < 0 || left > canvasCustomHDBSCAN.ActualWidth || top < 0 || top > canvasCustomHDBSCAN.ActualHeight)
+                {
+                    continue;
+                }
+                canvasCustomHDBSCAN.Children.Add(shape);
+            }
+        }
+
+        private void DisplayNoiseDBSCAN(List<WildfireRecord> noiseRecords)
         {
             var shapes = new List<UIElement>(noiseRecords.Count);
-            Console.WriteLine($"Отображение шума: {noiseRecords.Count} точек");
+            Console.WriteLine($"DBSCAN: Отображение шума: {noiseRecords.Count} точек");
             foreach (var record in noiseRecords)
             {
                 double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
                 double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                {
+                    Console.WriteLine($"DBSCAN: Пропущена точка шума (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                    continue;
+                }
                 var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Gray };
                 Canvas.SetLeft(shape, x);
                 Canvas.SetTop(shape, y);
@@ -237,8 +341,74 @@ namespace Kursovaja
 
             foreach (var shape in shapes)
             {
-                canvasCustom.Children.Add(shape);
+                double left = Canvas.GetLeft(shape);
+                double top = Canvas.GetTop(shape);
+                if (left < 0 || left > canvasCustomDBSCAN.ActualWidth || top < 0 || top > canvasCustomDBSCAN.ActualHeight)
+                {
+                    continue;
+                }
+                canvasCustomDBSCAN.Children.Add(shape);
             }
+
+            var noiseInfo = new ClusterInfo
+            {
+                ClusterId = -1,
+                PointCount = noiseRecords.Count,
+                ClusterColor = Brushes.Gray
+            };
+            if (!clusterInfosDBSCAN.Any(ci => ci.ClusterId == -1))
+                clusterInfosDBSCAN.Add(noiseInfo);
+            else
+                clusterInfosDBSCAN.First(ci => ci.ClusterId == -1).PointCount = noiseRecords.Count;
+
+            dataGridResultsDBSCAN.ItemsSource = null;
+            dataGridResultsDBSCAN.ItemsSource = clusterInfosDBSCAN.OrderBy(ci => ci.ClusterId == -1 ? int.MaxValue : ci.ClusterId).ToList();
+        }
+
+        private void DisplayNoiseHDBSCAN(List<WildfireRecord> noiseRecords)
+        {
+            var shapes = new List<UIElement>(noiseRecords.Count);
+            Console.WriteLine($"HDBSCAN: Отображение шума: {noiseRecords.Count} точек");
+            foreach (var record in noiseRecords)
+            {
+                double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
+                double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                {
+                    Console.WriteLine($"HDBSCAN: Пропущена точка шума (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                    continue;
+                }
+                var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Gray };
+                Canvas.SetLeft(shape, x);
+                Canvas.SetTop(shape, y);
+                shape.ToolTip = $"Шум\nLat: {record.Latitude}\nLon: {record.Longitude}";
+                shapes.Add(shape);
+            }
+
+            foreach (var shape in shapes)
+            {
+                double left = Canvas.GetLeft(shape);
+                double top = Canvas.GetTop(shape);
+                if (left < 0 || left > canvasCustomHDBSCAN.ActualWidth || top < 0 || top > canvasCustomHDBSCAN.ActualHeight)
+                {
+                    continue;
+                }
+                canvasCustomHDBSCAN.Children.Add(shape);
+            }
+
+            var noiseInfo = new ClusterInfo
+            {
+                ClusterId = -1,
+                PointCount = noiseRecords.Count,
+                ClusterColor = Brushes.Gray
+            };
+            if (!clusterInfosHDBSCAN.Any(ci => ci.ClusterId == -1))
+                clusterInfosHDBSCAN.Add(noiseInfo);
+            else
+                clusterInfosHDBSCAN.First(ci => ci.ClusterId == -1).PointCount = noiseRecords.Count;
+
+            dataGridResultsHDBSCAN.ItemsSource = null;
+            dataGridResultsHDBSCAN.ItemsSource = clusterInfosHDBSCAN.OrderBy(ci => ci.ClusterId == -1 ? int.MaxValue : ci.ClusterId).ToList();
         }
 
         private async void BtnClusterCustomClick(object sender, RoutedEventArgs e)
@@ -249,34 +419,57 @@ namespace Kursovaja
                 return;
             }
 
-            if (!double.TryParse(txtEpsilon.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double eps) || eps <= 0 ||
-                !int.TryParse(txtMinPoints.Text, out int minPts) || minPts < 1)
+            if (!double.TryParse(txtEpsilonDBSCAN.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double eps) || eps <= 0 ||
+            !int.TryParse(txtMinPointsDBSCAN.Text, out int minPts) || minPts < 1)
             {
-                MessageBox.Show("Некорректные параметры Epsilon или Min Points.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Некорректные параметры Epsilon или Min Points для DBSCAN.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
             try
             {
-                canvasCustom.Children.Clear();
-                clusterInfos.Clear();
+                canvasCustomDBSCAN.Children.Clear();
+                clusterInfosDBSCAN.Clear();
+
+                var validRecords = records.ToList();
+                Console.WriteLine($"DBSCAN: Всего записей: {records.Count}, после фильтрации: {validRecords.Count}");
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var dbscan = new DbscanCustom(eps, minPts); // Удален третий аргумент
-                dbscan.ClusterFound += (cluster, clusterId) => Dispatcher.Invoke(() => DisplayRecords(cluster, clusterId));
-                await Task.Run(() => dbscan.Cluster(records));
+                var dbscan = new DbscanCustom(eps, minPts);
+                int minClusterSize = 15;
+                int displayClusterId = 0;
+                dbscan.ClusterFound += (cluster, clusterId) =>
+                {
+                    if (cluster.Count >= minClusterSize)
+                    {
+                        displayClusterId++;
+                        Dispatcher.Invoke(() => DisplayRecordsDBSCAN(cluster, displayClusterId));
+                    }
+                    else
+                    {
+                        foreach (var point in cluster)
+                        {
+                            int idx = validRecords.IndexOf(point);
+                            if (idx >= 0 && idx < dbscan.Labels.Length)
+                                dbscan.Labels[idx] = -1;
+                        }
+                    }
+                };
+                await Task.Run(() => dbscan.Cluster(validRecords));
                 stopwatch.Stop();
                 Console.WriteLine($"DBSCAN выполнено за: {stopwatch.ElapsedMilliseconds} мс");
 
-                // Отображение шума
-                var noiseRecords = records.Where((r, i) => dbscan.Labels[i] == -1).ToList();
-                await Dispatcher.InvokeAsync(() => DisplayNoise(noiseRecords));
+                var noiseRecords = validRecords.Where((r, i) => dbscan.Labels[i] == -1).ToList();
+                Console.WriteLine($"DBSCAN: {displayClusterId} кластеров, {noiseRecords.Count} точек шума");
+                await Dispatcher.InvokeAsync(() => DisplayNoiseDBSCAN(noiseRecords));
 
-                MessageBox.Show($"Кластеризация завершена. Найдено {clusterInfos.Count} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                File.WriteAllLines("dbscan_labels.txt", dbscan.Labels.Select((l, i) => $"{i}: {l}"));
+
+                MessageBox.Show($"DBSCAN завершено. Найдено {displayClusterId} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка кластеризации: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Ошибка кластеризации DBSCAN: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -288,48 +481,68 @@ namespace Kursovaja
                 return;
             }
 
-            if (!int.TryParse(txtMinPoints.Text, out int minPts) || minPts < 1)
+            if (!double.TryParse(txtEpsilonHDBSCAN.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double eps) || eps <= 0 ||
+            !int.TryParse(txtMinPointsHDBSCAN.Text, out int minPts) || minPts < 1)
             {
-                MessageBox.Show("Некорректное значение Min Points.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show("Некорректные параметры Epsilon или Min Points для HDBSCAN.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
 
             try
             {
-                canvasCustom.Children.Clear();
-                clusterInfos.Clear();
+                canvasCustomHDBSCAN.Children.Clear();
+                clusterInfosHDBSCAN.Clear();
+
+                var validRecords = records.ToList();
+                Console.WriteLine($"HDBSCAN: Всего записей: {records.Count}, после фильтрации: {validRecords.Count}");
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var hdbscan = new HdbscanCustom(minPts, 5); // minClusterSize = 5
-                hdbscan.ClusterFound += (cluster, clusterId) => Dispatcher.Invoke(() => DisplayRecords(cluster, clusterId));
-                await hdbscan.Cluster(records);
+                var hdbscan = new HdbscanCustom(eps, minPts, 15);
+                int displayClusterId = 0;
+                hdbscan.ClusterFound += (cluster, clusterId) =>
+                {
+                    displayClusterId++;
+                    Dispatcher.Invoke(() => DisplayRecordsHDBSCAN(cluster, displayClusterId));
+                };
+                await Task.Run(() => hdbscan.Cluster(validRecords));
                 stopwatch.Stop();
                 Console.WriteLine($"HDBSCAN выполнено за: {stopwatch.ElapsedMilliseconds} мс");
 
-                // Отображение шума
-                var noiseRecords = records.Where((r, i) => hdbscan.Labels[i] == 0).ToList();
-                await Dispatcher.InvokeAsync(() => DisplayNoise(noiseRecords));
+                var noiseRecords = validRecords.Where((r, i) => hdbscan.Labels[i] == -1).ToList();
+                Console.WriteLine($"HDBSCAN: {displayClusterId} кластеров, {noiseRecords.Count} точек шума");
+                await Dispatcher.InvokeAsync(() => DisplayNoiseHDBSCAN(noiseRecords));
 
-                MessageBox.Show($"Кластеризация завершена. Найдено {clusterInfos.Count} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                File.WriteAllLines("hdbscan_labels.txt", hdbscan.Labels.Select((l, i) => $"{i}: {l}"));
+
+                MessageBox.Show($"HDBSCAN завершено. Найдено {displayClusterId} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Ошибка кластеризации: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
+                MessageBox.Show($"Ошибка кластеризации HDBSCAN: {ex.Message}\nInner: {ex.InnerException?.Message}", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
         private double ConvertXToCanvasX(double x)
         {
             double range = maxX - minX;
-            if (range == 0) return canvasCustom.ActualWidth / 2;
-            return (x - minX) / range * (canvasCustom.ActualWidth - 10) + 5;
+            if (range == 0) return canvasCustomDBSCAN.ActualWidth / 2; // Используем DBSCAN canvas как базовый
+            double canvasX = (x - minX) / range * (canvasCustomDBSCAN.ActualWidth - 10) + 5;
+            return Clamp(canvasX, 0, canvasCustomDBSCAN.ActualWidth);
         }
 
         private double ConvertYToCanvasY(double y)
         {
             double range = maxY - minY;
-            if (range == 0) return canvasCustom.ActualHeight / 2;
-            return (y - minY) / range * (canvasCustom.ActualHeight - 10) + 5;
+            if (range == 0) return canvasCustomDBSCAN.ActualHeight / 2; // Используем DBSCAN canvas как базовый
+            double canvasY = (y - minY) / range * (canvasCustomDBSCAN.ActualHeight - 10) + 5;
+            return Clamp(canvasY, 0, canvasCustomDBSCAN.ActualHeight);
+        }
+
+        private double Clamp(double value, double min, double max)
+        {
+            if (value < min) return min;
+            if (value > max) return max;
+            return value;
         }
     }
 }
