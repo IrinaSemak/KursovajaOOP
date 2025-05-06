@@ -31,11 +31,11 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Dbscan, Version=3.0.0.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\packages\Dbscan.3.0.0\lib\netstandard1.2\Dbscan.dll</HintPath>
+    <Reference Include="DbscanSharp, Version=1.0.0.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\DbscanSharp.1.0.0\lib\netstandard2.0\DbscanSharp.dll</HintPath>
     </Reference>
-    <Reference Include="HdbscanSharp, Version=3.0.0.0, Culture=neutral, PublicKeyToken=c97724a3048f05c7, processorArchitecture=MSIL">
-      <HintPath>..\packages\HdbscanSharp.3.0.0\lib\netstandard2.0\HdbscanSharp.dll</HintPath>
+    <Reference Include="KdTreeLib, Version=1.4.1.0, Culture=neutral, processorArchitecture=MSIL">
+      <HintPath>..\packages\KdTree.1.4.1\lib\net471\KdTreeLib.dll</HintPath>
     </Reference>
     <Reference Include="Microsoft.Bcl.Numerics, Version=9.0.0.2, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
       <HintPath>..\packages\Microsoft.Bcl.Numerics.9.0.2\lib\net462\Microsoft.Bcl.Numerics.dll</HintPath>
@@ -203,9 +203,10 @@
   <ItemGroup>
     <Compile Include="CsvLoader.cs" />
     <Compile Include="Dbscan.cs" />
-    <Compile Include="Hdbscan.cs" />
+    <Compile Include="DbscanLibrary.cs" />
+    <Compile Include="DbscanSharp.cs" />
+    <Compile Include="HaversineDbscan.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="WildfirePoint.cs" />
     <Compile Include="WildfireRecord.cs" />
   </ItemGroup>
   <ItemGroup>

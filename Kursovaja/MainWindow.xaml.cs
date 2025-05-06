@@ -436,7 +436,7 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
                 var dbscan = new DbscanCustom(eps, minPts);
-                int minClusterSize = 15;
+                int minClusterSize = 0;
                 int displayClusterId = 0;
                 dbscan.ClusterFound += (cluster, clusterId) =>
                 {
@@ -497,7 +497,7 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
                 Console.WriteLine($"HDBSCAN: Всего записей: {records.Count}, после фильтрации: {validRecords.Count}");
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var hdbscan = new HdbscanCustom(eps, minPts, 15);
+                var hdbscan = new HdbscanCustom(eps, minPts);
                 int displayClusterId = 0;
                 hdbscan.ClusterFound += (cluster, clusterId) =>
                 {
