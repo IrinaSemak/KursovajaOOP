@@ -2,56 +2,44 @@
 using System.Collections.Generic;
 using System.Linq;
 using DbscanSharp;
+using Library;
 
 namespace Library
 {
-    public class HdbscanCustom
+    // Класс для реализации алгоритма HDBSCAN (упрощённая версия как DBSCAN)
+    public class HdbscanAlgorithm : BaseClusteringAlgorithm
     {
-        private readonly double epsilon; // Радиус (epsilon) задан в километрах
-        private readonly int minPoints;
-        private readonly List<WildfireRecord> records;
-        private int[] labels;
-
-        public event Action<List<WildfireRecord>, int> ClusterFound;
-        public int[] Labels => labels;
-
-        public HdbscanCustom(double epsilonKm, int minPoints)
+        // Конструктор
+        public HdbscanAlgorithm(double epsilon, int minPoints)
+            : base(epsilon, minPoints)
         {
-            this.epsilon = epsilonKm;
-            this.minPoints = minPoints;
-            records = new List<WildfireRecord>();
-            labels = Array.Empty<int>();
         }
 
-        public void Cluster(IEnumerable<WildfireRecord> inputRecords)
+        // Реализация метода кластеризации
+        public override Dictionary<int, List<WildfireRecord>> Cluster(IEnumerable<WildfireRecord> inputRecords)
         {
-            records.Clear();
-            records.AddRange(inputRecords);
-            if (records.Count == 0)
-            {
-                labels = new int[0];
-                return;
-            }
+            LoadRecords(inputRecords);
+            var clustersDict = new Dictionary<int, List<WildfireRecord>>();
 
-            // Вычисляем среднюю широту (в градусах), затем переводим в радианы
+            if (records.Count == 0)
+                return clustersDict;
+
+            // Вычисляем среднюю широту и переводим в радианы
             double avgLatitude = records.Average(r => r.Latitude);
             double avgLatitudeRad = avgLatitude * Math.PI / 180.0;
             const double R = 6371; // Радиус Земли в километрах
 
-            // Преобразуем координаты:
-            // X = Latitude (в радианах) * R
-            // Y = Longitude (в радианах) * R * cos(avgLatitudeRad)
+            // Преобразуем координаты в двумерные точки
             var points = records.Select(r => new DbscanSharp.Dbscan.Point(
                 (float)(r.Latitude * Math.PI / 180.0 * R),
                 (float)(r.Longitude * Math.PI / 180.0 * R * Math.Cos(avgLatitudeRad))
             )).ToList();
 
-            // Создаем объект кластеризации Dbscan из библиотеки, epsilonKm уже в километрах.
+            // Выполняем кластеризацию с помощью библиотеки DbscanSharp
             var dbscan = new Dbscan(points, (float)epsilon, minPoints);
-            // Метод Fit() возвращает массив меток для каждой точки.
             labels = dbscan.Fit();
 
-            // Переиндексация меток: шум (изначально -1) остаётся, а кластеры перенумеровываются последовательно (1,2,3…)
+            // Переиндексация меток
             Dictionary<int, int> clusterMapping = new Dictionary<int, int>();
             int nextClusterLabel = 1;
             for (int i = 0; i < labels.Length; i++)
@@ -63,8 +51,7 @@ namespace Library
                 labels[i] = clusterMapping[labels[i]];
             }
 
-            // Группируем записи по меткам.
-            var clustersDict = new Dictionary<int, List<WildfireRecord>>();
+            // Группируем записи по меткам
             for (int i = 0; i < labels.Length; i++)
             {
                 int label = labels[i];
@@ -73,13 +60,7 @@ namespace Library
                 clustersDict[label].Add(records[i]);
             }
 
-            // Для каждого кластера (кроме шума) вызываем событие ClusterFound.
-            foreach (var kvp in clustersDict)
-            {
-                if (kvp.Key == -1)
-                    continue;
-                ClusterFound?.Invoke(kvp.Value, kvp.Key);
-            }
+            return clustersDict;
         }
     }
 }

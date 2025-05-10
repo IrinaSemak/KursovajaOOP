@@ -1,38 +1,30 @@
-﻿using System;
+﻿using Library;
+using System;
 using System.Collections.Generic;
 
-namespace Library
+namespace Kursovaja
 {
-    public class DbscanCustom
+    // Класс для реализации алгоритма DBSCAN
+    public class DbscanAlgorithm : BaseClusteringAlgorithm
     {
-        private readonly double epsilon; // Радиус в км
-        private readonly int minPoints;
-        private readonly List<WildfireRecord> records;
-        private int[] labels;
+        private readonly HaversineDistanceCalculator distanceCalculator;
 
-        public event Action<List<WildfireRecord>, int> ClusterFound;
-        public int[] Labels => labels;
-
-        public DbscanCustom(double epsilon, int minPoints)
+        // Конструктор
+        public DbscanAlgorithm(double epsilon, int minPoints, HaversineDistanceCalculator distanceCalculator)
+            : base(epsilon, minPoints)
         {
-            this.epsilon = epsilon;
-            this.minPoints = minPoints;
-            records = new List<WildfireRecord>();
-            labels = new int[0];
+            this.distanceCalculator = distanceCalculator;
         }
 
-        public void Cluster(IEnumerable<WildfireRecord> inputRecords)
+        // Реализация метода кластеризации
+        public override Dictionary<int, List<WildfireRecord>> Cluster(IEnumerable<WildfireRecord> inputRecords)
         {
-            records.Clear();
-            records.AddRange(inputRecords);
+            LoadRecords(inputRecords);
+            var clustersDict = new Dictionary<int, List<WildfireRecord>>();
 
             if (records.Count == 0)
-            {
-                labels = new int[0];
-                return;
-            }
+                return clustersDict;
 
-            labels = new int[records.Count];
             int clusterLabel = 0;
 
             for (int i = 0; i < records.Count; i++)
@@ -52,10 +44,23 @@ namespace Library
                 var cluster = new List<WildfireRecord> { records[i] };
                 ExpandCluster(neighbors, clusterLabel, cluster);
 
-                ClusterFound?.Invoke(cluster, clusterLabel);
+                clustersDict[clusterLabel] = cluster;
             }
+
+            // Добавляем шум
+            var noise = new List<WildfireRecord>();
+            for (int i = 0; i < labels.Length; i++)
+            {
+                if (labels[i] == -1)
+                    noise.Add(records[i]);
+            }
+            if (noise.Count > 0)
+                clustersDict[-1] = noise;
+
+            return clustersDict;
         }
 
+        // Метод для поиска соседей точки
         private List<int> GetNeighbors(int pointIndex)
         {
             var neighbors = new List<int>();
@@ -66,7 +71,7 @@ namespace Library
                 if (i == pointIndex)
                     continue;
 
-                double distance = CalculateHaversineDistance(
+                double distance = distanceCalculator.CalculateDistance(
                     point.Latitude, point.Longitude,
                     records[i].Latitude, records[i].Longitude
                 );
@@ -78,20 +83,7 @@ namespace Library
             return neighbors;
         }
 
-        private double CalculateHaversineDistance(double lat1, double lon1, double lat2, double lon2)
-        {
-            const double R = 6371; // Радиус Земли в км
-            double dLat = (lat2 - lat1) * Math.PI / 180;
-            double dLon = (lon2 - lon1) * Math.PI / 180;
-
-            double a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) +
-                       Math.Cos(lat1 * Math.PI / 180) * Math.Cos(lat2 * Math.PI / 180) *
-                       Math.Sin(dLon / 2) * Math.Sin(dLon / 2);
-
-            double c = 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a));
-            return R * c;
-        }
-
+        // Метод для расширения кластера
         private void ExpandCluster(List<int> initialNeighbors, int clusterLabel, List<WildfireRecord> cluster)
         {
             var queue = new Queue<int>(initialNeighbors);

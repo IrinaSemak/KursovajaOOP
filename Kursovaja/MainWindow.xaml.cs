@@ -8,22 +8,22 @@ using System.Windows.Shapes;
 using System.Globalization;
 using Microsoft.Win32;
 using System.Threading.Tasks;
-using Library;
 using System.IO;
+using Library;
 
 namespace Kursovaja
 {
     public partial class MainWindow : Window
     {
         private readonly List<WildfireRecord> records = new List<WildfireRecord>();
-        private readonly List<ClusterInfo> clusterInfosDBSCAN = new List<ClusterInfo>(); // Для DBSCAN
-        private readonly List<ClusterInfo> clusterInfosHDBSCAN = new List<ClusterInfo>(); // Для HDBSCAN
+        private readonly List<ClusterInfo> clusterInfosDBSCAN = new List<ClusterInfo>();
+        private readonly List<ClusterInfo> clusterInfosHDBSCAN = new List<ClusterInfo>();
         private double minLat, maxLat, minLon, maxLon;
         private double minX, maxX, minY, maxY;
         private readonly Brush[] clusterColors = {
-Brushes.Red, Brushes.Blue, Brushes.Green, Brushes.Orange, Brushes.Purple,
-Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
-};
+            Brushes.Red, Brushes.Blue, Brushes.Green, Brushes.Orange, Brushes.Purple,
+            Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
+        };
 
         public MainWindow()
         {
@@ -59,14 +59,13 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
 
         private void DataGridResultsSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Пустая реализация, если не требуется
+            // Пустая реализация
         }
 
         private async void BtnLoadDataClick(object sender, RoutedEventArgs e)
         {
             var openFileDialog = new OpenFileDialog
             {
-
                 Title = "Выберите CSV-файл с данными"
             };
 
@@ -80,14 +79,16 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
                 dataGridResultsDBSCAN.ItemsSource = null;
                 dataGridResultsHDBSCAN.ItemsSource = null;
 
+                // Используем интерфейс для чтения файла
+                IFileReader fileReader = new CsvFileReader();
                 await Task.Run(() =>
                 {
-                    foreach (var record in CsvLoader.LoadCsvStream(openFileDialog.FileName))
+                    foreach (var record in fileReader.LoadRecords(openFileDialog.FileName))
                     {
                         if (!record.IsLatitudeMissing && !record.IsLongitudeMissing &&
-                        !string.IsNullOrEmpty(record.X) && !string.IsNullOrEmpty(record.Y) &&
-                        double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out _) &&
-                        double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+                            !string.IsNullOrEmpty(record.X) && !string.IsNullOrEmpty(record.Y) &&
+                            double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out _) &&
+                            double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
                         {
                             records.Add(record);
                         }
@@ -177,19 +178,22 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
             }
         }
 
-        private void DisplayRecordsDBSCAN(List<WildfireRecord> cluster = null, int clusterId = 0)
+        private void DisplayRecordsDBSCAN(Dictionary<int, List<WildfireRecord>> clusters = null)
         {
             if (canvasCustomDBSCAN.ActualWidth == 0 || canvasCustomDBSCAN.ActualHeight == 0)
             {
                 Console.WriteLine("DBSCAN: Холст еще не готов для отображения. Размеры: " +
-                $"Width={canvasCustomDBSCAN.ActualWidth}, Height={canvasCustomDBSCAN.ActualHeight}");
+                    $"Width={canvasCustomDBSCAN.ActualWidth}, Height={canvasCustomDBSCAN.ActualHeight}");
                 return;
             }
 
-            var shapes = new List<UIElement>(cluster?.Count ?? records.Count);
-            Console.WriteLine($"DBSCAN: Отображение: clusterId={clusterId}, точек={(cluster?.Count ?? records.Count)}");
-            if (cluster == null)
+            canvasCustomDBSCAN.Children.Clear();
+            clusterInfosDBSCAN.Clear();
+
+            if (clusters == null)
             {
+                var shapes = new List<UIElement>(records.Count);
+                Console.WriteLine($"DBSCAN: Отображение всех точек: {records.Count}");
                 foreach (var record in records)
                 {
                     double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
@@ -205,62 +209,81 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
                     shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
                     shapes.Add(shape);
                 }
+
+                foreach (var shape in shapes)
+                {
+                    double left = Canvas.GetLeft(shape);
+                    double top = Canvas.GetTop(shape);
+                    if (left < 0 || left > canvasCustomDBSCAN.ActualWidth || top < 0 || top > canvasCustomDBSCAN.ActualHeight)
+                        continue;
+                    canvasCustomDBSCAN.Children.Add(shape);
+                }
             }
             else
             {
-                Brush color = clusterColors[clusterId % clusterColors.Length];
-                var clusterInfo = clusterInfosDBSCAN.Find(ci => ci.ClusterId == clusterId) ?? new ClusterInfo
+                foreach (var kvp in clusters)
                 {
-                    ClusterId = clusterId,
-                    PointCount = cluster.Count,
-                    ClusterColor = color
-                };
-                if (!clusterInfosDBSCAN.Contains(clusterInfo)) clusterInfosDBSCAN.Add(clusterInfo);
-                else clusterInfo.PointCount = cluster.Count;
+                    int clusterId = kvp.Key;
+                    var cluster = kvp.Value;
+                    Brush color = clusterId == -1 ? Brushes.Gray : clusterColors[clusterId % clusterColors.Length];
+                    var shapes = new List<UIElement>(cluster.Count);
+                    Console.WriteLine($"DBSCAN: Кластер {clusterId}: {cluster.Count} точек");
 
-                Console.WriteLine($"DBSCAN: Кластер {clusterId}: {cluster.Count} точек");
-                foreach (var record in cluster)
-                {
-                    double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
-                    double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                    foreach (var record in cluster)
                     {
-                        Console.WriteLine($"DBSCAN: Пропущена точка в кластере (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
-                        continue;
+                        double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
+                        double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                        if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                        {
+                            Console.WriteLine($"DBSCAN: Пропущена точка в кластере (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                            continue;
+                        }
+                        var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
+                        Canvas.SetLeft(shape, x);
+                        Canvas.SetTop(shape, y);
+                        shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
+                        shapes.Add(shape);
                     }
-                    var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
-                    Canvas.SetLeft(shape, x);
-                    Canvas.SetTop(shape, y);
-                    shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
-                    shapes.Add(shape);
-                }
-            }
 
-            foreach (var shape in shapes)
-            {
-                double left = Canvas.GetLeft(shape);
-                double top = Canvas.GetTop(shape);
-                if (left < 0 || left > canvasCustomDBSCAN.ActualWidth || top < 0 || top > canvasCustomDBSCAN.ActualHeight)
-                {
-                    continue;
+                    foreach (var shape in shapes)
+                    {
+                        double left = Canvas.GetLeft(shape);
+                        double top = Canvas.GetTop(shape);
+                        if (left < 0 || left > canvasCustomDBSCAN.ActualWidth || top < 0 || top > canvasCustomDBSCAN.ActualHeight)
+                            continue;
+                        canvasCustomDBSCAN.Children.Add(shape);
+                    }
+
+                    var clusterInfo = new ClusterInfo
+                    {
+                        ClusterId = clusterId,
+                        PointCount = cluster.Count,
+                        ClusterColor = color
+                    };
+                    clusterInfosDBSCAN.Add(clusterInfo);
                 }
-                canvasCustomDBSCAN.Children.Add(shape);
+
+                dataGridResultsDBSCAN.ItemsSource = null;
+                dataGridResultsDBSCAN.ItemsSource = clusterInfosDBSCAN.OrderBy(ci => ci.ClusterId == -1 ? int.MaxValue : ci.ClusterId).ToList();
             }
         }
 
-        private void DisplayRecordsHDBSCAN(List<WildfireRecord> cluster = null, int clusterId = 0)
+        private void DisplayRecordsHDBSCAN(Dictionary<int, List<WildfireRecord>> clusters = null)
         {
             if (canvasCustomHDBSCAN.ActualWidth == 0 || canvasCustomHDBSCAN.ActualHeight == 0)
             {
                 Console.WriteLine("HDBSCAN: Холст еще не готов для отображения. Размеры: " +
-                $"Width={canvasCustomHDBSCAN.ActualWidth}, Height={canvasCustomHDBSCAN.ActualHeight}");
+                    $"Width={canvasCustomHDBSCAN.ActualWidth}, Height={canvasCustomHDBSCAN.ActualHeight}");
                 return;
             }
 
-            var shapes = new List<UIElement>(cluster?.Count ?? records.Count);
-            Console.WriteLine($"HDBSCAN: Отображение: clusterId={clusterId}, точек={(cluster?.Count ?? records.Count)}");
-            if (cluster == null)
+            canvasCustomHDBSCAN.Children.Clear();
+            clusterInfosHDBSCAN.Clear();
+
+            if (clusters == null)
             {
+                var shapes = new List<UIElement>(records.Count);
+                Console.WriteLine($"HDBSCAN: Отображение всех точек: {records.Count}");
                 foreach (var record in records)
                 {
                     double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
@@ -276,139 +299,63 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
                     shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
                     shapes.Add(shape);
                 }
-            }
-            else
-            {
-                Brush color = clusterColors[clusterId % clusterColors.Length];
-                var clusterInfo = clusterInfosHDBSCAN.Find(ci => ci.ClusterId == clusterId) ?? new ClusterInfo
-                {
-                    ClusterId = clusterId,
-                    PointCount = cluster.Count,
-                    ClusterColor = color
-                };
-                if (!clusterInfosHDBSCAN.Contains(clusterInfo)) clusterInfosHDBSCAN.Add(clusterInfo);
-                else clusterInfo.PointCount = cluster.Count;
 
-                Console.WriteLine($"HDBSCAN: Кластер {clusterId}: {cluster.Count} точек");
-                foreach (var record in cluster)
+                foreach (var shape in shapes)
                 {
-                    double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
-                    double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                    if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
-                    {
-                        Console.WriteLine($"HDBSCAN: Пропущена точка в кластере (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                    double left = Canvas.GetLeft(shape);
+                    double top = Canvas.GetTop(shape);
+                    if (left < 0 || left > canvasCustomHDBSCAN.ActualWidth || top < 0 || top > canvasCustomHDBSCAN.ActualHeight)
                         continue;
+                    canvasCustomHDBSCAN.Children.Add(shape);
+                }
+            }
+            else
+            {
+                foreach (var kvp in clusters)
+                {
+                    int clusterId = kvp.Key;
+                    var cluster = kvp.Value;
+                    Brush color = clusterId == -1 ? Brushes.Gray : clusterColors[clusterId % clusterColors.Length];
+                    var shapes = new List<UIElement>(cluster.Count);
+                    Console.WriteLine($"HDBSCAN: Кластер {clusterId}: {cluster.Count} точек");
+
+                    foreach (var record in cluster)
+                    {
+                        double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
+                        double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
+                        if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
+                        {
+                            Console.WriteLine($"HDBSCAN: Пропущена точка в кластере (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
+                            continue;
+                        }
+                        var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
+                        Canvas.SetLeft(shape, x);
+                        Canvas.SetTop(shape, y);
+                        shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
+                        shapes.Add(shape);
                     }
-                    var shape = new Ellipse { Width = 5, Height = 5, Fill = color };
-                    Canvas.SetLeft(shape, x);
-                    Canvas.SetTop(shape, y);
-                    shape.ToolTip = $"{record.StreetNumber} {record.StreetName} {record.StreetType}\nLat: {record.Latitude}\nLon: {record.Longitude}";
-                    shapes.Add(shape);
+
+                    foreach (var shape in shapes)
+                    {
+                        double left = Canvas.GetLeft(shape);
+                        double top = Canvas.GetTop(shape);
+                        if (left < 0 || left > canvasCustomHDBSCAN.ActualWidth || top < 0 || top > canvasCustomHDBSCAN.ActualHeight)
+                            continue;
+                        canvasCustomHDBSCAN.Children.Add(shape);
+                    }
+
+                    var clusterInfo = new ClusterInfo
+                    {
+                        ClusterId = clusterId,
+                        PointCount = cluster.Count,
+                        ClusterColor = color
+                    };
+                    clusterInfosHDBSCAN.Add(clusterInfo);
                 }
+
+                dataGridResultsHDBSCAN.ItemsSource = null;
+                dataGridResultsHDBSCAN.ItemsSource = clusterInfosHDBSCAN.OrderBy(ci => ci.ClusterId == -1 ? int.MaxValue : ci.ClusterId).ToList();
             }
-
-            foreach (var shape in shapes)
-            {
-                double left = Canvas.GetLeft(shape);
-                double top = Canvas.GetTop(shape);
-                if (left < 0 || left > canvasCustomHDBSCAN.ActualWidth || top < 0 || top > canvasCustomHDBSCAN.ActualHeight)
-                {
-                    continue;
-                }
-                canvasCustomHDBSCAN.Children.Add(shape);
-            }
-        }
-
-        private void DisplayNoiseDBSCAN(List<WildfireRecord> noiseRecords)
-        {
-            var shapes = new List<UIElement>(noiseRecords.Count);
-            Console.WriteLine($"DBSCAN: Отображение шума: {noiseRecords.Count} точек");
-            foreach (var record in noiseRecords)
-            {
-                double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
-                double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
-                {
-                    Console.WriteLine($"DBSCAN: Пропущена точка шума (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
-                    continue;
-                }
-                var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Gray };
-                Canvas.SetLeft(shape, x);
-                Canvas.SetTop(shape, y);
-                shape.ToolTip = $"Шум\nLat: {record.Latitude}\nLon: {record.Longitude}";
-                shapes.Add(shape);
-            }
-
-            foreach (var shape in shapes)
-            {
-                double left = Canvas.GetLeft(shape);
-                double top = Canvas.GetTop(shape);
-                if (left < 0 || left > canvasCustomDBSCAN.ActualWidth || top < 0 || top > canvasCustomDBSCAN.ActualHeight)
-                {
-                    continue;
-                }
-                canvasCustomDBSCAN.Children.Add(shape);
-            }
-
-            var noiseInfo = new ClusterInfo
-            {
-                ClusterId = -1,
-                PointCount = noiseRecords.Count,
-                ClusterColor = Brushes.Gray
-            };
-            if (!clusterInfosDBSCAN.Any(ci => ci.ClusterId == -1))
-                clusterInfosDBSCAN.Add(noiseInfo);
-            else
-                clusterInfosDBSCAN.First(ci => ci.ClusterId == -1).PointCount = noiseRecords.Count;
-
-            dataGridResultsDBSCAN.ItemsSource = null;
-            dataGridResultsDBSCAN.ItemsSource = clusterInfosDBSCAN.OrderBy(ci => ci.ClusterId == -1 ? int.MaxValue : ci.ClusterId).ToList();
-        }
-
-        private void DisplayNoiseHDBSCAN(List<WildfireRecord> noiseRecords)
-        {
-            var shapes = new List<UIElement>(noiseRecords.Count);
-            Console.WriteLine($"HDBSCAN: Отображение шума: {noiseRecords.Count} точек");
-            foreach (var record in noiseRecords)
-            {
-                double x = ConvertXToCanvasX(double.Parse(record.X, CultureInfo.InvariantCulture));
-                double y = ConvertYToCanvasY(double.Parse(record.Y, CultureInfo.InvariantCulture));
-                if (double.IsNaN(x) || double.IsInfinity(x) || double.IsNaN(y) || double.IsInfinity(y))
-                {
-                    Console.WriteLine($"HDBSCAN: Пропущена точка шума (некорректные координаты): X={record.X}, Y={record.Y}, Canvas X={x}, Canvas Y={y}");
-                    continue;
-                }
-                var shape = new Ellipse { Width = 5, Height = 5, Fill = Brushes.Gray };
-                Canvas.SetLeft(shape, x);
-                Canvas.SetTop(shape, y);
-                shape.ToolTip = $"Шум\nLat: {record.Latitude}\nLon: {record.Longitude}";
-                shapes.Add(shape);
-            }
-
-            foreach (var shape in shapes)
-            {
-                double left = Canvas.GetLeft(shape);
-                double top = Canvas.GetTop(shape);
-                if (left < 0 || left > canvasCustomHDBSCAN.ActualWidth || top < 0 || top > canvasCustomHDBSCAN.ActualHeight)
-                {
-                    continue;
-                }
-                canvasCustomHDBSCAN.Children.Add(shape);
-            }
-
-            var noiseInfo = new ClusterInfo
-            {
-                ClusterId = -1,
-                PointCount = noiseRecords.Count,
-                ClusterColor = Brushes.Gray
-            };
-            if (!clusterInfosHDBSCAN.Any(ci => ci.ClusterId == -1))
-                clusterInfosHDBSCAN.Add(noiseInfo);
-            else
-                clusterInfosHDBSCAN.First(ci => ci.ClusterId == -1).PointCount = noiseRecords.Count;
-
-            dataGridResultsHDBSCAN.ItemsSource = null;
-            dataGridResultsHDBSCAN.ItemsSource = clusterInfosHDBSCAN.OrderBy(ci => ci.ClusterId == -1 ? int.MaxValue : ci.ClusterId).ToList();
         }
 
         private async void BtnClusterCustomClick(object sender, RoutedEventArgs e)
@@ -420,7 +367,7 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
             }
 
             if (!double.TryParse(txtEpsilonDBSCAN.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double eps) || eps <= 0 ||
-            !int.TryParse(txtMinPointsDBSCAN.Text, out int minPts) || minPts < 1)
+                !int.TryParse(txtMinPointsDBSCAN.Text, out int minPts) || minPts < 1)
             {
                 MessageBox.Show("Некорректные параметры Epsilon или Min Points для DBSCAN.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
@@ -428,44 +375,24 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
 
             try
             {
-                canvasCustomDBSCAN.Children.Clear();
-                clusterInfosDBSCAN.Clear();
-
                 var validRecords = records.ToList();
                 Console.WriteLine($"DBSCAN: Всего записей: {records.Count}, после фильтрации: {validRecords.Count}");
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var dbscan = new DbscanCustom(eps, minPts);
-                int minClusterSize = 0;
-                int displayClusterId = 0;
-                dbscan.ClusterFound += (cluster, clusterId) =>
-                {
-                    if (cluster.Count >= minClusterSize)
-                    {
-                        displayClusterId++;
-                        Dispatcher.Invoke(() => DisplayRecordsDBSCAN(cluster, displayClusterId));
-                    }
-                    else
-                    {
-                        foreach (var point in cluster)
-                        {
-                            int idx = validRecords.IndexOf(point);
-                            if (idx >= 0 && idx < dbscan.Labels.Length)
-                                dbscan.Labels[idx] = -1;
-                        }
-                    }
-                };
-                await Task.Run(() => dbscan.Cluster(validRecords));
+                // Используем интерфейс для кластеризации
+                IClusteringAlgorithm dbscan = new DbscanAlgorithm(eps, minPts, new HaversineDistanceCalculator());
+                Dictionary<int, List<WildfireRecord>> clusters = await Task.Run(() => dbscan.Cluster(validRecords));
                 stopwatch.Stop();
                 Console.WriteLine($"DBSCAN выполнено за: {stopwatch.ElapsedMilliseconds} мс");
 
-                var noiseRecords = validRecords.Where((r, i) => dbscan.Labels[i] == -1).ToList();
-                Console.WriteLine($"DBSCAN: {displayClusterId} кластеров, {noiseRecords.Count} точек шума");
-                await Dispatcher.InvokeAsync(() => DisplayNoiseDBSCAN(noiseRecords));
+                int clusterCount = clusters.Count(kvp => kvp.Key != -1);
+                int noiseCount = clusters.ContainsKey(-1) ? clusters[-1].Count : 0;
+                Console.WriteLine($"DBSCAN: {clusterCount} кластеров, {noiseCount} точек шума");
 
+                await Dispatcher.InvokeAsync(() => DisplayRecordsDBSCAN(clusters));
                 File.WriteAllLines("dbscan_labels.txt", dbscan.Labels.Select((l, i) => $"{i}: {l}"));
 
-                MessageBox.Show($"DBSCAN завершено. Найдено {displayClusterId} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"DBSCAN завершено. Найдено {clusterCount} кластеров, {noiseCount} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -482,7 +409,7 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
             }
 
             if (!double.TryParse(txtEpsilonHDBSCAN.Text, NumberStyles.Any, CultureInfo.InvariantCulture, out double eps) || eps <= 0 ||
-            !int.TryParse(txtMinPointsHDBSCAN.Text, out int minPts) || minPts < 1)
+                !int.TryParse(txtMinPointsHDBSCAN.Text, out int minPts) || minPts < 1)
             {
                 MessageBox.Show("Некорректные параметры Epsilon или Min Points для HDBSCAN.", "Ошибка", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
@@ -490,31 +417,24 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
 
             try
             {
-                canvasCustomHDBSCAN.Children.Clear();
-                clusterInfosHDBSCAN.Clear();
-
                 var validRecords = records.ToList();
                 Console.WriteLine($"HDBSCAN: Всего записей: {records.Count}, после фильтрации: {validRecords.Count}");
 
                 var stopwatch = System.Diagnostics.Stopwatch.StartNew();
-                var hdbscan = new HdbscanCustom(eps, minPts);
-                int displayClusterId = 0;
-                hdbscan.ClusterFound += (cluster, clusterId) =>
-                {
-                    displayClusterId++;
-                    Dispatcher.Invoke(() => DisplayRecordsHDBSCAN(cluster, displayClusterId));
-                };
-                await Task.Run(() => hdbscan.Cluster(validRecords));
+                // Используем интерфейс для кластеризации
+                IClusteringAlgorithm hdbscan = new HdbscanAlgorithm(eps, minPts);
+                Dictionary<int, List<WildfireRecord>> clusters = await Task.Run(() => hdbscan.Cluster(validRecords));
                 stopwatch.Stop();
                 Console.WriteLine($"HDBSCAN выполнено за: {stopwatch.ElapsedMilliseconds} мс");
 
-                var noiseRecords = validRecords.Where((r, i) => hdbscan.Labels[i] == -1).ToList();
-                Console.WriteLine($"HDBSCAN: {displayClusterId} кластеров, {noiseRecords.Count} точек шума");
-                await Dispatcher.InvokeAsync(() => DisplayNoiseHDBSCAN(noiseRecords));
+                int clusterCount = clusters.Count(kvp => kvp.Key != -1);
+                int noiseCount = clusters.ContainsKey(-1) ? clusters[-1].Count : 0;
+                Console.WriteLine($"HDBSCAN: {clusterCount} кластеров, {noiseCount} точек шума");
 
+                await Dispatcher.InvokeAsync(() => DisplayRecordsHDBSCAN(clusters));
                 File.WriteAllLines("hdbscan_labels.txt", hdbscan.Labels.Select((l, i) => $"{i}: {l}"));
 
-                MessageBox.Show($"HDBSCAN завершено. Найдено {displayClusterId} кластеров, {noiseRecords.Count} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show($"HDBSCAN завершено. Найдено {clusterCount} кластеров, {noiseCount} точек шума.", "Успех", MessageBoxButton.OK, MessageBoxImage.Information);
             }
             catch (Exception ex)
             {
@@ -525,7 +445,7 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
         private double ConvertXToCanvasX(double x)
         {
             double range = maxX - minX;
-            if (range == 0) return canvasCustomDBSCAN.ActualWidth / 2; // Используем DBSCAN canvas как базовый
+            if (range == 0) return canvasCustomDBSCAN.ActualWidth / 2;
             double canvasX = (x - minX) / range * (canvasCustomDBSCAN.ActualWidth - 10) + 5;
             return Clamp(canvasX, 0, canvasCustomDBSCAN.ActualWidth);
         }
@@ -533,7 +453,7 @@ Brushes.Cyan, Brushes.Magenta, Brushes.Yellow, Brushes.Brown, Brushes.Pink
         private double ConvertYToCanvasY(double y)
         {
             double range = maxY - minY;
-            if (range == 0) return canvasCustomDBSCAN.ActualHeight / 2; // Используем DBSCAN canvas как базовый
+            if (range == 0) return canvasCustomDBSCAN.ActualHeight / 2;
             double canvasY = (y - minY) / range * (canvasCustomDBSCAN.ActualHeight - 10) + 5;
             return Clamp(canvasY, 0, canvasCustomDBSCAN.ActualHeight);
         }

@@ -1,13 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
+using System.Globalization;
 
 namespace Library
 {
-    public static class CsvLoader
+    // Класс для чтения данных из CSV-файла
+    public class CsvFileReader : IFileReader
     {
-        public static IEnumerable<WildfireRecord> LoadCsvStream(string filePath)
+        // Метод загрузки записей из файла
+        public IEnumerable<WildfireRecord> LoadRecords(string filePath)
         {
             if (!File.Exists(filePath))
             {
@@ -15,8 +17,7 @@ namespace Library
                 yield break;
             }
 
-            StreamReader reader = new StreamReader(filePath);
-            try
+            using (StreamReader reader = new StreamReader(filePath))
             {
                 string header = reader.ReadLine();
                 if (string.IsNullOrEmpty(header))
@@ -74,32 +75,27 @@ namespace Library
                     else
                         record.IsLongitudeMissing = true;
 
-                    // Проверяем корректность X и Y
-                    if (!double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out double xValue))
+                    if (!double.TryParse(record.X, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
                     {
                         Console.WriteLine($"Строка {lineNumber}: некорректное значение X = {record.X}. Пропуск.");
                         continue;
                     }
 
-                    if (!double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out double yValue))
+                    if (!double.TryParse(record.Y, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
                     {
                         Console.WriteLine($"Строка {lineNumber}: некорректное значение Y = {record.Y}. Пропуск.");
                         continue;
                     }
 
-                    // Логируем координаты для отладки
                     if (!record.IsLatitudeMissing && !record.IsLongitudeMissing)
                         Console.WriteLine($"Запись {lineNumber}: Latitude = {record.Latitude}, Longitude = {record.Longitude}, X = {record.X}, Y = {record.Y}");
 
                     yield return record;
                 }
             }
-            finally
-            {
-                reader.Dispose();
-            }
         }
 
+        // Метод для разбора строки CSV
         private static string[] ParseCsvLine(string line)
         {
             var result = new List<string>(47);
